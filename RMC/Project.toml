@@ -1,3 +1,8 @@
+name = "RMC"
+uuid = "2fd093d5-57d6-49cd-bf46-1e0f4f53dc6c"
+authors = ["Jacob Harris <jacob.harris.122@gmail.com>"]
+version = "0.1.0"
+
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
