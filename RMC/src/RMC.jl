@@ -10,6 +10,8 @@ export update!, run_sim!
 
 using StatsBase
 
+include("historical.jl")
+
 #####
 ##### Rate Providers
 #####
