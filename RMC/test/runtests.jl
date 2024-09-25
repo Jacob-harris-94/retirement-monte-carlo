@@ -18,9 +18,52 @@ end
     test_balances = Balances(ONE_HUNDRED, ONE_HUNDRED)
     result_balances = step!(strat, test_balances, YEAR)
     @test result_balances == test_balances
+    # testing regular contributions
+    ONE_HUNDRED = 100.0
+    strat = RegularContributionStrategy(ONE_HUNDRED)
+    test_balances = Balances(ONE_HUNDRED, ONE_HUNDRED)
+    SAVINGS_RATE = 0.0 
+    INVEST_RATE = 0.0
+    savings_rp = RateMean(SAVINGS_RATE)
+    invest_rp = RateMean(INVEST_RATE)
+    YEARS = 50
+    end_balances = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
+    end_balances.savings == (YEARS + 1) * ONE_HUNDRED
+    # testing skip + regular contributions
+    ONE_HUNDRED = 100.0
+    YEARS = 50
+    SKIP_YEARS = Int64.(1:10)
+    strat = SkipRegularContributionStrategy(ONE_HUNDRED, SKIP_YEARS)
+    test_balances = Balances(ONE_HUNDRED, ONE_HUNDRED)
+    SAVINGS_RATE = 0.0 
+    INVEST_RATE = 0.0
+    savings_rp = RateMean(SAVINGS_RATE)
+    invest_rp = RateMean(INVEST_RATE)
+    end_balances_1 = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
+    @test end_balances_1.savings == ONE_HUNDRED # not touched
+    @test end_balances_1.investment == (YEARS + 1 - length(SKIP_YEARS)) * ONE_HUNDRED
+    # same but with interest
+    ONE_HUNDRED = 100.0
+    YEARS = 50
+    SKIP_YEARS_EARLY = Int64.(1:10) # skip first 10
+    SKIP_YEARS_LATE = Int64.(41:50) # skip last 10
+    strat_early = SkipRegularContributionStrategy(ONE_HUNDRED, SKIP_YEARS_EARLY)
+    strat_late = SkipRegularContributionStrategy(ONE_HUNDRED, SKIP_YEARS_LATE)
+    SAVINGS_RATE = 0.0 
+    INVEST_RATE = 0.05
+    savings_rp = RateMean(SAVINGS_RATE)
+    invest_rp = RateMean(INVEST_RATE)
+    balances_early = Balances(ONE_HUNDRED, ONE_HUNDRED)
+    end_balances_early = run_sim!(savings_rp, invest_rp, strat_early, YEARS, balances_early)
+    balances_late = Balances(ONE_HUNDRED, ONE_HUNDRED)
+    end_balances_late = run_sim!(savings_rp, invest_rp, strat_late, YEARS, balances_late)
+    @info end_balances_early.investment
+    @info end_balances_late.investment
+    @test end_balances_late.investment > 1.1 * end_balances_early.investment # just guessing it will be this different
 end
 
 @testset "sim math" begin
+    # testing the compound interest math
     strat = InitialBalanceStrategy()
     ONE = 1.0
     test_balances = Balances(ONE, ONE)
