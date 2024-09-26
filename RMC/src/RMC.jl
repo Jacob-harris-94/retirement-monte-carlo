@@ -52,7 +52,7 @@ abstract type AbstractStrategy <: Any end
     new_balances = step!(as::AbstractStrategy, balances)
 
 Interface for AbstractStrategy.
-Returns updated `balances`
+Returns updated `balances`, takes current `balances`.
 """
 function step!(as::AbstractStrategy, balances, year_index)
     error("implement this for $(typeof(as))")
@@ -107,6 +107,7 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
         investment_rate = rate(investment_rate_provider)
         update!(balances, savings_rate, investment_rate)
     end
+    # TODO: add a drawdown phase
     return balances
 end
 
@@ -128,10 +129,10 @@ function test_run(; investment_init, years, yearly_contribution=0.0, years_to_sk
     return results
 end
 
-function analyze(results)
+function analyze(results, plot_title="")
     results_no_outliers = results[percentile(results, 1) .< results .< percentile(results, 99)] # only for plotting
     hist = fit(Histogram, results_no_outliers, nbins=250)
-    plot(hist)
+    plot(hist, title=plot_title)
     h_max_plus = Int(ceil(maximum(hist.weights) * 1.2)) # for nicely plotting vertical lines
     pct_5 = percentile(results, 5)
     pct_50 = percentile(results, 50)
@@ -140,6 +141,5 @@ function analyze(results)
     plot!([(pct_5, 0), (pct_5, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="5th percentile (millions) $pct_5_formatted_millions")
     plot!([(pct_50, 0), (pct_50, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile (millions) $pct_50_formatted_millions")
 end 
-
 
 end # module
