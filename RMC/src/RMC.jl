@@ -5,7 +5,7 @@ module RMC
 #####
 
 export AbstractRateProvider, rate, RateMean, RateHistorical
-export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy
+export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTable
 export update!, run_sim!, test_run, analyze
 
 using StatsBase, Plots
@@ -89,6 +89,24 @@ function step!(strat::SkipRegularContributionStrategy, balances::Balances, year_
     return balances
 end
 
+struct TakeGainsOffTable <: AbstractStrategy
+    amount_yearly::Float64
+    years_to_skip::Vector{Int64}
+    threshold::Float64
+end
+function step!(strat::TakeGainsOffTable, balances::Balances, year_index)
+    if year_index in strat.years_to_skip
+        return balances
+    end
+    excess = balances.investment - strat.threshold
+    if excess > 0
+        balances.investment -= excess
+        balances.savings += excess
+    end
+    balances.investment += strat.amount_yearly
+    return balances
+end
+
 #####
 ##### Simulation running logic
 #####
@@ -112,7 +130,7 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
 end
 
 function test_run(; investment_init, years, yearly_contribution=0.0, years_to_skip=[], num_sims=100_000)
-    savings_rp = RateMean(0.0)
+    savings_rp = RateMean(0.03) # approx 5 year treasury
     invest_rp = RateHistorical(s_and_p_500_historical)
     strat = nothing
     if yearly_contribution > 0.0
