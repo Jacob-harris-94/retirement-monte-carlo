@@ -66,7 +66,7 @@ end
     end
     @testset "TakeGainsOffTable" begin
         THRESHOLD = 1_000_000.0
-        strat = TakeGainsOffTable(20_000.0, Int64[], THRESHOLD)
+        strat = TakeGainsOffTableStrategy(20_000.0, Int64[], THRESHOLD)
         test_balances = Balances(0, 0)
         SAVINGS_RATE = 0.0 # just cash
         INVEST_RATE = 0.30 # ridiculous yearly rate

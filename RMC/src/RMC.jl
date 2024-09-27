@@ -5,7 +5,7 @@ module RMC
 #####
 
 export AbstractRateProvider, rate, RateMean, RateHistorical
-export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTable
+export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy
 export update!, run_sim!, test_run, analyze
 
 using StatsBase, Plots
@@ -37,10 +37,6 @@ struct RateHistorical <: AbstractRateProvider
     rates::Vector{Float64}
 end
 rate(r::RateHistorical) = sample(r.rates)
-"""
-TODO: update for actual historical rates
-"""
-const RH = RateHistorical(Float64[0.01, -0.2, +0.3, +0.05, +0.01, -0.05, +0.02, +0.1, +0.1, +0.20])
 
 #####
 ##### Strategies
@@ -63,6 +59,9 @@ mutable struct Balances <: Any
     investment::Float64
 end
 Balances() = Balances(0.0, 0.0)
+function Base.sum(b::Balances)
+    return b.investment + b.savings
+end
 
 struct InitialBalanceStrategy <: AbstractStrategy end
 function step!(ibs::InitialBalanceStrategy, balances::Balances, _)
@@ -89,12 +88,12 @@ function step!(strat::SkipRegularContributionStrategy, balances::Balances, year_
     return balances
 end
 
-struct TakeGainsOffTable <: AbstractStrategy
+struct TakeGainsOffTableStrategy <: AbstractStrategy
     amount_yearly::Float64
     years_to_skip::Vector{Int64}
     threshold::Float64
 end
-function step!(strat::TakeGainsOffTable, balances::Balances, year_index)
+function step!(strat::TakeGainsOffTableStrategy, balances::Balances, year_index)
     if year_index in strat.years_to_skip
         return balances
     end
@@ -126,36 +125,40 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
         update!(balances, savings_rate, investment_rate)
     end
     # TODO: add a drawdown phase
+    # TODO: add inflation compensation
     return balances
 end
 
-function test_run(; investment_init, years, yearly_contribution=0.0, years_to_skip=[], num_sims=100_000)
+function test_run(; investment_init, years, yearly_contribution=0.0, years_to_skip=[], threshold=0.0, num_sims=100_000)
     savings_rp = RateMean(0.03) # approx 5 year treasury
-    invest_rp = RateHistorical(s_and_p_500_historical)
+    invest_rp = RateHistorical(s_and_p_generator(pessimism=5))
     strat = nothing
-    if yearly_contribution > 0.0
+    if threshold > 0.0
+        strat = TakeGainsOffTableStrategy(yearly_contribution, years_to_skip, threshold)
+    elseif yearly_contribution > 0.0
         strat = SkipRegularContributionStrategy(yearly_contribution, years_to_skip)
     else
         strat = InitialBalanceStrategy()
     end
-    results = Float64[]
+    results = Balances[]
     for ii in 1:num_sims
         bals = Balances(0, investment_init)
         out = run_sim!(savings_rp, invest_rp, strat, years, bals)
-        push!(results, out.investment)
+        push!(results, out)
     end
     return results
 end
 
-function analyze(results, plot_title="")
+function analyze(result_balances, plot_title="")
+    results = sum.(result_balances)/1e6 # combine savings and investment
     results_no_outliers = results[percentile(results, 1) .< results .< percentile(results, 99)] # only for plotting
     hist = fit(Histogram, results_no_outliers, nbins=250)
     plot(hist, title=plot_title)
     h_max_plus = Int(ceil(maximum(hist.weights) * 1.2)) # for nicely plotting vertical lines
     pct_5 = percentile(results, 5)
     pct_50 = percentile(results, 50)
-    pct_5_formatted_millions = round(pct_5 / 1e6, digits=2)
-    pct_50_formatted_millions = round(pct_50 / 1e6, digits=2)
+    pct_5_formatted_millions = round(pct_5, digits=2)
+    pct_50_formatted_millions = round(pct_50, digits=2)
     plot!([(pct_5, 0), (pct_5, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="5th percentile (millions) $pct_5_formatted_millions")
     plot!([(pct_50, 0), (pct_50, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile (millions) $pct_50_formatted_millions")
 end 
