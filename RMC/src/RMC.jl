@@ -4,8 +4,8 @@ module RMC
 ##### Exports / Imports
 #####
 
-export AbstractRateProvider, rate, RateMean, RateHistorical
-export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy
+export AbstractRateProvider, rate, RateMean, RateHistorical, s_and_p_generator
+export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy
 export update!, run_sim!, test_run, analyze
 
 using StatsBase, Plots
@@ -106,6 +106,33 @@ function step!(strat::TakeGainsOffTableStrategy, balances::Balances, year_index)
     return balances
 end
 
+struct TargetRatioStrategy <: AbstractStrategy
+    amount_yearly::Float64
+    years_to_skip::Vector{Int64}
+    investment_fraction_per_year::Vector{Float64} # same length as number of years
+end
+function step!(strat::TargetRatioStrategy, balances::Balances, year_index)
+    if year_index in strat.years_to_skip
+        return balances
+    end
+    balances.investment += strat.amount_yearly # going to be rebalanced immediately anyway
+    total_balance = sum(balances)
+    target_ratio = strat.investment_fraction_per_year[year_index]
+    actual_ratio = balances.investment / total_balance
+    adjustment_fraction = target_ratio - actual_ratio
+    adjustment_amount = adjustment_fraction * total_balance
+    balances.investment += adjustment_amount
+    balances.savings -= adjustment_amount
+    return balances
+end
+function sigmoid_skewed(num_years::Int)
+    # start and stop found by trial and error, starts dropping off noticably from 1.0 around halfway, ends around 0.0
+    x = range(start=-10, stop=5, length=num_years)
+    e = Base.MathConstants.e
+    y = 1 .- (1 ./ (1 .+ e.^(-x))) # TODO: clean up?
+    return y
+end
+
 #####
 ##### Simulation running logic
 #####
@@ -129,6 +156,7 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
     return balances
 end
 
+# TODO: better way to view and compare multiple runs, e.g. violin plots?
 function test_run(; investment_init, years, yearly_contribution=0.0, years_to_skip=[], threshold=0.0, num_sims=100_000)
     savings_rp = RateMean(0.03) # approx 5 year treasury
     invest_rp = RateHistorical(s_and_p_generator(pessimism=5))

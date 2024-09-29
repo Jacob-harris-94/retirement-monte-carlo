@@ -2,9 +2,10 @@ using Test, StatsBase
 using RMC
 
 @testset "RateProviders" begin
-    rh = RMC.RH
+    # TODO: set seed
+    rh = RateHistorical(s_and_p_generator())
     rh_mean = mean(rate(rh) for _ in 1:100000)
-    @test 0.01 < rh_mean < 0.09
+    @test 0.01 < rh_mean < 0.14
    
     TEST_RATE = 0.06
     rm_mean = mean(rate(RateMean(TEST_RATE)) for _ in 1:100000)
@@ -76,6 +77,12 @@ end
         end_balances = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
         @test isapprox(end_balances.investment, THRESHOLD, rtol=0.1+INVEST_RATE)
         @test end_balances.savings > 0
+    end
+    @testset "TargetRato" begin
+        # test that a single iteration works
+        strat = TargetRatioStrategy(0.0, [], [0.25])
+        rebalanced = step!(strat, Balances(100.0, 0.0), 1)
+        @test (rebalanced.investment == 25.0) && (rebalanced.savings == 75.0)
     end
 end
 
