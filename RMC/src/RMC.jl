@@ -4,11 +4,13 @@ module RMC
 ##### Exports / Imports
 #####
 
-export AbstractRateProvider, rate, RateMean, RateHistorical, s_and_p_generator
+export AbstractRateProvider, rate, RateMean, RateHistorical, RateNormal, s_and_p_generator
 export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid
 export update!, run_sim!, test_run, analyze
 
-using StatsBase, Plots
+using StatsBase
+using Distributions: rand
+using Plots
 
 include("historical.jl")
 
@@ -37,6 +39,13 @@ struct RateHistorical <: AbstractRateProvider
     rates::Vector{Float64}
 end
 rate(r::RateHistorical) = sample(r.rates)
+
+@kwdef struct RateNormal <: AbstractRateProvider
+    # default values close to historical s&p including dividends
+    mean = 0.12
+    std_dev = 0.2
+end
+rate(r::RateNormal) = rand(Normal(r.mean, r.std_dev))
 
 #####
 ##### Strategies
