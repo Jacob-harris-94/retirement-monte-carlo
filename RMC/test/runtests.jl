@@ -83,6 +83,20 @@ end
         strat = TargetRatioStrategy(0.0, [], [0.25])
         rebalanced = step!(strat, Balances(100.0, 0.0), 1)
         @test (rebalanced.investment == 25.0) && (rebalanced.savings == 75.0)
+        # test it works over multiple iterations
+        YEARS = 25
+        strat = TargetRatioStrategy(0.0, [], sigmoid(YEARS))
+        bals = Balances(100.0, 0.0)
+        results = []
+        for yi in 1:YEARS
+            # no contribution, just rebalancing
+            bals = step!(strat, bals, yi)
+            push!(results, deepcopy(bals))
+        end
+        totals = sum.(results)
+        ratios = map(b -> b.investment / sum(b), results)
+        @test all(totals .≈  100.0)
+        @test all(ratios .≈ sigmoid(YEARS))
     end
 end
 

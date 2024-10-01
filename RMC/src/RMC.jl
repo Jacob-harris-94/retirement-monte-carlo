@@ -5,7 +5,7 @@ module RMC
 #####
 
 export AbstractRateProvider, rate, RateMean, RateHistorical, s_and_p_generator
-export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy
+export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid
 export update!, run_sim!, test_run, analyze
 
 using StatsBase, Plots
@@ -125,9 +125,8 @@ function step!(strat::TargetRatioStrategy, balances::Balances, year_index)
     balances.savings -= adjustment_amount
     return balances
 end
-function sigmoid_skewed(num_years::Int)
-    # start and stop found by trial and error, starts dropping off noticably from 1.0 around halfway, ends around 0.0
-    x = range(start=-10, stop=5, length=num_years)
+function sigmoid(num_years::Int, start=-5, stop=5)
+    x = range(start, stop, length=num_years)
     e = Base.MathConstants.e
     y = 1 .- (1 ./ (1 .+ e.^(-x))) # TODO: clean up?
     return y
@@ -157,17 +156,9 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
 end
 
 # TODO: better way to view and compare multiple runs, e.g. violin plots?
-function test_run(; investment_init, years, yearly_contribution=0.0, years_to_skip=[], threshold=0.0, num_sims=100_000)
-    savings_rp = RateMean(0.03) # approx 5 year treasury
-    invest_rp = RateHistorical(s_and_p_generator(pessimism=5))
-    strat = nothing
-    if threshold > 0.0
-        strat = TakeGainsOffTableStrategy(yearly_contribution, years_to_skip, threshold)
-    elseif yearly_contribution > 0.0
-        strat = SkipRegularContributionStrategy(yearly_contribution, years_to_skip)
-    else
-        strat = InitialBalanceStrategy()
-    end
+# approx 5 year treasury
+# yearly_contribution=0.0, years_to_skip=[], threshold=0.0,
+function test_run(; savings_rp=RateMean(0.03), invest_rp=RateHistorical(s_and_p_generator(pessimism=5)), strat, investment_init, years, num_sims=100_000)
     results = Balances[]
     for ii in 1:num_sims
         bals = Balances(0, investment_init)
@@ -182,7 +173,7 @@ function analyze(result_balances, plot_title="")
     results_no_outliers = results[percentile(results, 1) .< results .< percentile(results, 99)] # only for plotting
     hist = fit(Histogram, results_no_outliers, nbins=250)
     plot(hist, title=plot_title)
-    h_max_plus = Int(ceil(maximum(hist.weights) * 1.2)) # for nicely plotting vertical lines
+    h_max_plus = Int(ceil(maximum(hist.weights) * 1.05)) # for nicely plotting vertical lines
     pct_5 = percentile(results, 5)
     pct_50 = percentile(results, 50)
     pct_5_formatted_millions = round(pct_5, digits=2)
@@ -192,3 +183,5 @@ function analyze(result_balances, plot_title="")
 end 
 
 end # module
+
+# TODO: does it make sense that TakeGainsOffTable seems to dominate the other Strategies? I would expect TargetRatioStrategy to do better with the right ratios... but I might be wrong.
