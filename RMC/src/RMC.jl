@@ -9,8 +9,8 @@ export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContrib
 export update!, run_sim!, test_run, analyze
 
 using StatsBase
-using Distributions: rand
-using Plots
+using Distributions: rand, Normal
+using StatsPlots
 
 include("historical.jl")
 
@@ -161,10 +161,12 @@ function run_sim!(savings_rate_provider, investment_rate_provider, strategy, ite
     end
     # TODO: add a drawdown phase
     # TODO: add inflation compensation
+    # TODO: target value(s)/percentile(s)
     return balances
 end
 
 # TODO: better way to view and compare multiple runs, e.g. violin plots?
+# TODO: plot log scale?
 # approx 5 year treasury
 # yearly_contribution=0.0, years_to_skip=[], threshold=0.0,
 function test_run(; savings_rp=RateMean(0.03), invest_rp=RateHistorical(s_and_p_generator(pessimism=5)), strat, investment_init, years, num_sims=100_000)
