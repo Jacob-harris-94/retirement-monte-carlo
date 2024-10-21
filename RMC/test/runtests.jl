@@ -8,7 +8,7 @@ using RMC
     @test 0.01 < rh_mean < 0.14
    
     TEST_RATE = 0.06
-    rm_mean = mean(rate(RateMean(TEST_RATE)) for _ in 1:100000)
+    rm_mean = mean(rate(RateConst(TEST_RATE)) for _ in 1:100000)
     @test isapprox(TEST_RATE, rm_mean)
 end
 
@@ -26,11 +26,12 @@ end
         test_balances = Balances(ONE_HUNDRED, ONE_HUNDRED)
         SAVINGS_RATE = 0.0 
         INVEST_RATE = 0.0
-        savings_rp = RateMean(SAVINGS_RATE)
-        invest_rp = RateMean(INVEST_RATE)
+        savings_rp = RateConst(SAVINGS_RATE)
+        invest_rp = RateConst(INVEST_RATE)
         YEARS = 50
-        end_balances = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
-        end_balances.savings == (YEARS + 1) * ONE_HUNDRED
+        test_sim = Simulation(savings_rp, invest_rp, strat, test_balances, YEARS, 1)
+        end_balances = first(run_fixed_years(test_sim))
+        @test end_balances.investment == (YEARS + 1) * ONE_HUNDRED
     end
     @testset "skip years" begin
     # testing skip + regular contributions
@@ -41,9 +42,10 @@ end
         test_balances = Balances(ONE_HUNDRED, ONE_HUNDRED)
         SAVINGS_RATE = 0.0 
         INVEST_RATE = 0.0
-        savings_rp = RateMean(SAVINGS_RATE)
-        invest_rp = RateMean(INVEST_RATE)
-        end_balances_1 = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
+        savings_rp = RateConst(SAVINGS_RATE)
+        invest_rp = RateConst(INVEST_RATE)
+        test_sim = Simulation(savings_rp, invest_rp, strat, test_balances, YEARS, 1)
+        end_balances_1  = first(run_fixed_years(test_sim))
         @test end_balances_1.savings == ONE_HUNDRED # not touched
         @test end_balances_1.investment == (YEARS + 1 - length(SKIP_YEARS)) * ONE_HUNDRED
         # same but with interest
@@ -55,12 +57,14 @@ end
         strat_late = SkipRegularContributionStrategy(ONE_HUNDRED, SKIP_YEARS_LATE)
         SAVINGS_RATE = 0.0 
         INVEST_RATE = 0.05
-        savings_rp = RateMean(SAVINGS_RATE)
-        invest_rp = RateMean(INVEST_RATE)
+        savings_rp = RateConst(SAVINGS_RATE)
+        invest_rp = RateConst(INVEST_RATE)
         balances_early = Balances(ONE_HUNDRED, ONE_HUNDRED)
-        end_balances_early = run_sim!(savings_rp, invest_rp, strat_early, YEARS, balances_early)
+        test_sim_early = Simulation(savings_rp, invest_rp, strat_early, balances_early, YEARS, 1)
+        end_balances_early  = first(run_fixed_years(test_sim_early))
         balances_late = Balances(ONE_HUNDRED, ONE_HUNDRED)
-        end_balances_late = run_sim!(savings_rp, invest_rp, strat_late, YEARS, balances_late)
+        test_sim_late = Simulation(savings_rp, invest_rp, strat_late, balances_late, YEARS, 1)
+        end_balances_late = first(run_fixed_years(test_sim_late))
         @info end_balances_early.investment
         @info end_balances_late.investment
         @test end_balances_late.investment > 1.1 * end_balances_early.investment # just guessing it will be this different
@@ -72,9 +76,10 @@ end
         SAVINGS_RATE = 0.0 # just cash
         INVEST_RATE = 0.30 # ridiculous yearly rate
         YEARS = 50
-        savings_rp = RateMean(SAVINGS_RATE)
-        invest_rp = RateMean(INVEST_RATE)
-        end_balances = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
+        savings_rp = RateConst(SAVINGS_RATE)
+        invest_rp = RateConst(INVEST_RATE)
+        test_sim = Simulation(savings_rp, invest_rp, strat, test_balances, YEARS, 1)
+        end_balances  = first(run_fixed_years(test_sim))
         @test isapprox(end_balances.investment, THRESHOLD, rtol=0.1+INVEST_RATE)
         @test end_balances.savings > 0
     end
@@ -111,10 +116,11 @@ end
     test_balances = Balances(ONE, ONE)
     SAVINGS_RATE = 0.01
     INVEST_RATE = 0.06
-    savings_rp = RateMean(SAVINGS_RATE)
-    invest_rp = RateMean(INVEST_RATE)
+    savings_rp = RateConst(SAVINGS_RATE)
+    invest_rp = RateConst(INVEST_RATE)
     YEARS = 50
-    end_balances = run_sim!(savings_rp, invest_rp, strat, YEARS, test_balances)
+    test_sim = Simulation(savings_rp, invest_rp, strat, test_balances, YEARS, 1)
+    end_balances = first(run_fixed_years(test_sim))
     @test end_balances isa Balances
     @test end_balances.savings ≈ (1 + SAVINGS_RATE)^YEARS
     @test end_balances.investment ≈ (1 + INVEST_RATE)^YEARS

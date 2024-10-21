@@ -4,9 +4,9 @@ module RMC
 ##### Exports / Imports
 #####
 
-export AbstractRateProvider, rate, RateMean, RateHistorical, RateNormal, s_and_p_generator
+export AbstractRateProvider, rate, RateConst, RateHistorical, RateNormal, s_and_p_generator
 export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid
-export update!, run_sim!, test_run, analyze
+export Simulation, update!, run_fixed_years, analyze
 
 using StatsBase
 using Distributions: rand, Normal
@@ -30,10 +30,10 @@ function rate(arp::AbstractRateProvider)
     error("implement this for $(typeof(arp))")
 end
 
-struct RateMean <: AbstractRateProvider
+struct RateConst <: AbstractRateProvider
     rate::Float64
 end
-rate(r::RateMean) = r.rate
+rate(r::RateConst) = r.rate
 
 struct RateHistorical <: AbstractRateProvider
     rates::Vector{Float64}
@@ -124,8 +124,10 @@ function step!(strat::TargetRatioStrategy, balances::Balances, year_index)
     if year_index in strat.years_to_skip
         return balances
     end
+
     balances.investment += strat.amount_yearly # going to be rebalanced immediately anyway
     total_balance = sum(balances)
+    @assert total_balance > 0.0
     target_ratio = strat.investment_fraction_per_year[year_index]
     actual_ratio = balances.investment / total_balance
     adjustment_fraction = target_ratio - actual_ratio
@@ -151,34 +153,45 @@ function update!(bals::Balances, savings_rate, investment_rate)
    return nothing
 end
 
-function run_sim!(savings_rate_provider, investment_rate_provider, strategy, iterations, balance_init=Balances())
-    balances = balance_init
-    for ii in 1:iterations
-        balances = step!(strategy, balances, ii)
-        savings_rate = rate(savings_rate_provider)
-        investment_rate = rate(investment_rate_provider)
-        update!(balances, savings_rate, investment_rate)
-    end
-    # TODO: add a drawdown phase
-    # TODO: add inflation compensation
-    # TODO: target value(s)/percentile(s)
-    return balances
+@kwdef mutable struct Simulation <: Any
+    savings_rate_provider::AbstractRateProvider # = RateConst(0.03)
+    investment_rate_provider::AbstractRateProvider
+    strategy::AbstractStrategy
+    balance_init::Balances
+    years::Int
+    num_samples::Int
 end
 
-# TODO: better way to view and compare multiple runs, e.g. violin plots?
-# TODO: plot log scale?
-# approx 5 year treasury
-# yearly_contribution=0.0, years_to_skip=[], threshold=0.0,
-function test_run(; savings_rp=RateMean(0.03), invest_rp=RateHistorical(s_and_p_generator(pessimism=5)), strat, investment_init, years, num_sims=100_000)
+"""
+run a fixed-year Monte Carlo sim
+
+### TODO
+- add a drawdown phase
+- add inflation compensation
+- target value(s)/percentile(s)
+- plot log scale?
+- does it make sense that TakeGainsOffTable seems to dominate the other Strategies? I would expect TargetRatioStrategy to do better with the right ratios... but I might be wrong.
+
+"""
+function run_fixed_years(sim::Simulation)
     results = Balances[]
-    for ii in 1:num_sims
-        bals = Balances(0, investment_init)
-        out = run_sim!(savings_rp, invest_rp, strat, years, bals)
-        push!(results, out)
+    for ii in 1:sim.num_samples
+        balances = deepcopy(sim.balance_init)
+        for ii in 1:sim.years
+            balances = step!(sim.strategy, balances, ii)
+            savings_rate = rate(sim.savings_rate_provider)
+            investment_rate = rate(sim.investment_rate_provider)
+            update!(balances, savings_rate, investment_rate)
+        end
+        push!(results, balances)
     end
     return results
 end
 
+"""
+### TODO
+- better way to view and compare multiple runs, e.g. violin plots?
+"""
 function analyze(result_balances, plot_title="")
     results = sum.(result_balances)/1e6 # combine savings and investment
     results_no_outliers = results[percentile(results, 1) .< results .< percentile(results, 99)] # only for plotting
@@ -189,10 +202,11 @@ function analyze(result_balances, plot_title="")
     pct_50 = percentile(results, 50)
     pct_5_formatted_millions = round(pct_5, digits=2)
     pct_50_formatted_millions = round(pct_50, digits=2)
-    plot!([(pct_5, 0), (pct_5, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="5th percentile (millions) $pct_5_formatted_millions")
-    plot!([(pct_50, 0), (pct_50, h_max_plus)]; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile (millions) $pct_50_formatted_millions")
+    pct_5_line = [(pct_5, 0), (pct_5, h_max_plus)]
+    pct_50_line = [(pct_50, 0), (pct_50, h_max_plus)]
+    plot!(pct_5_line; linestyle=:dash, lineweight=:thick, color=:red, label="5th percentile (millions) $pct_5_formatted_millions")
+    plot!(pct_50_line; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile (millions) $pct_50_formatted_millions")
+    # return (pct_5, pct_50) # TODO: this breaks plotting in the repl for some reason
 end 
 
 end # module
-
-# TODO: does it make sense that TakeGainsOffTable seems to dominate the other Strategies? I would expect TargetRatioStrategy to do better with the right ratios... but I might be wrong.

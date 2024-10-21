@@ -20,22 +20,15 @@ then run interactively from the REPL, for example...
 
 These currently only address Use Case 1.
 
-### High level
+### run a simulation of only market exposure for 30 years
 ```julia
-result_balances = test_run(invest_rp=RateHistorical(s_and_p_generator(pessimism=1)), investment_init=10_000.0, years=30, strat=TakeGainsOffTableStrategy(20_000.0, [], 1e6))
-analyze(result_balances, "30 years, 20k cont, 1e6 threshold, p1") # generates histogram with 5, 50 percentile marks
-```
-
-### Low level
-```julia
-INIT_BALANCE = 10_000.0
-YEARS = 25
-savings_rp = RateMean(0.0)
-invest_rp = RateHistorical(RMC.s_and_p_500_historical)
-for ii in 1:100_000
-    bals = Balances(0, INIT_BALANCE)
-    out = run_sim!(savings_rp, invest_rp, InitialBalanceStrategy(), YEARS, bals)
-    push!(results, out.investment)
-end
-percentile(results, 05)
+s1 = Simulation(
+    RateConst(0.03),
+    RateHistorical(s_and_p_generator(; pessimism=1)),
+    TargetRatioStrategy(0.0, [], fill(1.0, 30)),
+    Balances(0, 10_000),
+    30,
+    100_000
+    )
+analyze(run_fixed_years(s1))
 ```
