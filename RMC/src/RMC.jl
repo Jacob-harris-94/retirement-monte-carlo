@@ -11,6 +11,7 @@ export Simulation, update!, run_fixed_years, analyze
 using StatsBase
 using Distributions: rand, Normal
 using StatsPlots
+using Base.Threads
 
 include("historical.jl")
 
@@ -165,6 +166,10 @@ end
 """
 run a fixed-year Monte Carlo sim
 
+
+### notes
+- tested inverting the loop order and it made essentially no difference, but this way parallelizes nicely
+
 ### TODO
 - add a drawdown phase
 - add inflation compensation
@@ -174,18 +179,16 @@ run a fixed-year Monte Carlo sim
 
 """
 function run_fixed_years(sim::Simulation)
-    results = Balances[]
-    for ii in 1:sim.num_samples
-        balances = deepcopy(sim.balance_init)
-        for ii in 1:sim.years
-            balances = step!(sim.strategy, balances, ii)
+    balances = [Balances(sim.balance_init.savings, sim.balance_init.investment)  for _ in 1:sim.num_samples]
+    Threads.@threads for ii in 1:sim.num_samples
+        for year in 1:sim.years
+            balances[ii] = step!(sim.strategy, balances[ii], year)
             savings_rate = rate(sim.savings_rate_provider)
             investment_rate = rate(sim.investment_rate_provider)
-            update!(balances, savings_rate, investment_rate)
+            update!(balances[ii], savings_rate, investment_rate)
         end
-        push!(results, balances)
     end
-    return results
+    return balances
 end
 
 """

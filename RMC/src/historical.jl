@@ -17,8 +17,8 @@ function s_and_p_generator(sequence=s_and_p_500_historical; pessimism=0)
     end
     sorted = sort(sequence)
     n_worst = sorted[1:pessimism]
-    n_best = sorted[end-pessimism:end]
-    filter!(e -> !(e in n_best), sorted)
-    append!(sorted, n_worst)
-    return shuffle(sorted)
+    # n_best = sorted[end-pessimism+1:end]
+    middle = sorted[pessimism+1 : end-pessimism]
+    result = [n_worst; n_worst; middle]
+    return shuffle(result)
 end

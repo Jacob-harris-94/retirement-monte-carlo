@@ -106,7 +106,11 @@ end
 end
 
 @testset "pessimism" begin
-    # TODO
+    p0 = s_and_p_generator(; pessimism=0)
+    p1 = s_and_p_generator(; pessimism=1)
+    # 1 2 3 4
+    # 1 1 2 3
+    @test sort(p0)[1:end-1] == sort(p1)[2:end] # same except lowest, highest
 end
 
 @testset "sim math" begin
@@ -125,3 +129,4 @@ end
     @test end_balances.savings ≈ (1 + SAVINGS_RATE)^YEARS
     @test end_balances.investment ≈ (1 + INVEST_RATE)^YEARS
 end
+
