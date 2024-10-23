@@ -6,12 +6,12 @@ module RMC
 
 export AbstractRateProvider, rate, RateConst, RateHistorical, RateNormal, s_and_p_generator
 export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid
-export Simulation, update!, run_fixed_years, analyze
+export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, analyze, analyze_years
 
 using StatsBase
 using Distributions: rand, Normal
 using StatsPlots
-using Base.Threads
+using Base.Threads: @threads
 
 include("historical.jl")
 
@@ -163,6 +163,17 @@ end
     num_samples::Int
 end
 
+@kwdef mutable struct SimulationFixedValue <: Any
+    savings_rate_provider::AbstractRateProvider # = RateConst(0.03)
+    investment_rate_provider::AbstractRateProvider
+    strategy::AbstractStrategy
+    balance_init::Balances
+    balance_target::Float64
+    years_max::Int
+    num_samples::Int
+end
+
+
 """
 run a fixed-year Monte Carlo sim
 
@@ -192,8 +203,31 @@ function run_fixed_years(sim::Simulation)
 end
 
 """
+    run_fixed_value(sim::SimulationFixedValue)
+
+run a strategy until it achieves a target value of `sim.balance_target` or hits a max of `sim.years`.
+"""
+function run_fixed_value(sim::SimulationFixedValue)
+    balances = [Balances(sim.balance_init.savings, sim.balance_init.investment)  for _ in 1:sim.num_samples]
+    years = fill(sim.years_max, sim.num_samples)
+    @threads for ii in 1:sim.num_samples
+        for year in 1:sim.years_max
+            balances[ii] = step!(sim.strategy, balances[ii], year)
+            savings_rate = rate(sim.savings_rate_provider)
+            investment_rate = rate(sim.investment_rate_provider)
+            update!(balances[ii], savings_rate, investment_rate)
+            if sum(balances[ii]) >= sim.balance_target
+                years[ii] = year
+                break
+            end
+        end
+    end
+    return years
+end
+
+"""
 ### TODO
-- better way to view and compare multiple runs, e.g. violin plots?
+- better way to view and compare multiple runs, e.g. violin plots? or aligned multi-plot figures?
 """
 function analyze(result_balances, plot_title="")
     results = sum.(result_balances)/1e6 # combine savings and investment
@@ -209,6 +243,21 @@ function analyze(result_balances, plot_title="")
     pct_50_line = [(pct_50, 0), (pct_50, h_max_plus)]
     plot!(pct_5_line; linestyle=:dash, lineweight=:thick, color=:red, label="5th percentile (millions) $pct_5_formatted_millions")
     plot!(pct_50_line; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile (millions) $pct_50_formatted_millions")
+    # return (pct_5, pct_50) # TODO: this breaks plotting in the repl for some reason
+end 
+
+function analyze_years(result_years, plot_title="")
+    results = result_years
+    results_no_outliers = result_years 
+    hist = fit(Histogram, results_no_outliers, nbins=maximum(results))
+    plot(hist, title=plot_title, label="years to achieve target value")
+    h_max_plus = Int(ceil(maximum(hist.weights) * 1.05)) # for nicely plotting vertical lines
+    pct_95 = percentile(results, 95)
+    pct_50 = percentile(results, 50)
+    pct_95_line = [(pct_95, 0), (pct_95, h_max_plus)]
+    pct_50_line = [(pct_50, 0), (pct_50, h_max_plus)]
+    plot!(pct_95_line; linestyle=:dash, lineweight=:thick, color=:red, label="95th percentile $pct_95")
+    plot!(pct_50_line; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile $pct_50")
     # return (pct_5, pct_50) # TODO: this breaks plotting in the repl for some reason
 end 
 
