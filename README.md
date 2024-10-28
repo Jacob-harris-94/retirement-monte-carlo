@@ -18,9 +18,8 @@ then run interactively from the REPL, for example...
 
 ## Examples
 
-These currently only address Use Case 1.
 
-### run a simulation of only market exposure for 30 years
+### Use Case 1: run a simulation of only market exposure for 30 years
 ```julia
 s1 = Simulation(
     RateConst(0.03),
@@ -31,4 +30,18 @@ s1 = Simulation(
     100_000
     )
 analyze(run_fixed_years(s1))
+```
+
+### Use Case 2: run a simulation of only market exposure, until a target value is reached
+```julia
+s2 = SimulationFixedValue(
+    RateConst(0.03),
+    RateHistorical(s_and_p_generator(; pessimism=1)),
+    TargetRatioStrategy(1_000.0, [], fill(1.0, 30)),
+    Balances(0, 10_000),
+    100_000
+    100,
+    100_000
+    )
+analyze_years(run_fixed_value(s2))
 ```
