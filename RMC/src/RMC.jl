@@ -5,13 +5,15 @@ module RMC
 #####
 
 export AbstractRateProvider, rate, RateConst, RateHistorical, RateNormal, s_and_p_generator
-export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid
+export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid, InvestmentDrawdownStrategy, MultipleStrategy
 export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, analyze, analyze_years
 
 using StatsBase
 using Distributions: rand, Normal
 using StatsPlots
 using Base.Threads: @threads
+
+using Infiltrator
 
 include("historical.jl")
 
@@ -144,6 +146,24 @@ function sigmoid(num_years::Int, start=-5, stop=5)
     return y
 end
 
+struct InvestmentDrawdownStrategy <: AbstractStrategy 
+    amount_yearly::Float64
+end
+function step!(strat::InvestmentDrawdownStrategy, balances::Balances, year_index)
+    balances.investment -= strat.amount_yearly
+    return balances
+end
+
+struct MultipleStrategy <: AbstractStrategy
+    strategies::AbstractVector{AbstractStrategy}
+end
+function step!(multistrat::MultipleStrategy, balances::Balances, year_index)
+    for strat in multistrat.strategies
+        balances = step!(strat, balances, year_index)
+    end
+    return balances
+end
+
 #####
 ##### Simulation running logic
 #####
@@ -154,7 +174,7 @@ function update!(bals::Balances, savings_rate, investment_rate)
    return nothing
 end
 
-@kwdef mutable struct Simulation <: Any
+mutable struct Simulation <: Any
     savings_rate_provider::AbstractRateProvider # = RateConst(0.03)
     investment_rate_provider::AbstractRateProvider
     strategy::AbstractStrategy
@@ -163,7 +183,7 @@ end
     num_samples::Int
 end
 
-@kwdef mutable struct SimulationFixedValue <: Any
+mutable struct SimulationFixedValue <: Any
     savings_rate_provider::AbstractRateProvider # = RateConst(0.03)
     investment_rate_provider::AbstractRateProvider
     strategy::AbstractStrategy
@@ -173,6 +193,7 @@ end
     num_samples::Int
 end
 
+const ZERO_BALANCE = Balances(0.0, 0.0)
 
 """
 run a fixed-year Monte Carlo sim
@@ -184,6 +205,7 @@ run a fixed-year Monte Carlo sim
 ### TODO
 - add a drawdown phase
 - add inflation compensation
+    - https://fred.stlouisfed.org/series/EXPINF30YR
 - target value(s)/percentile(s)
 - plot log scale?
 - does it make sense that TakeGainsOffTable seems to dominate the other Strategies? I would expect TargetRatioStrategy to do better with the right ratios... but I might be wrong.
@@ -193,10 +215,15 @@ function run_fixed_years(sim::Simulation)
     balances = [Balances(sim.balance_init.savings, sim.balance_init.investment)  for _ in 1:sim.num_samples]
     Threads.@threads for ii in 1:sim.num_samples
         for year in 1:sim.years
+            @infiltrate sum(balances[ii]) < 0.0
             balances[ii] = step!(sim.strategy, balances[ii], year)
             savings_rate = rate(sim.savings_rate_provider)
             investment_rate = rate(sim.investment_rate_provider)
             update!(balances[ii], savings_rate, investment_rate)
+            if sum(balances[ii]) < 0.0
+                balances[ii] = ZERO_BALANCE
+                break
+            end
         end
     end
     return balances

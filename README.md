@@ -45,3 +45,25 @@ s2 = SimulationFixedValue(
     )
 analyze_years(run_fixed_value(s2))
 ```
+
+### Use Case 3: What investment strategy `I` will achive value `V` or better at year `Y` with confidence `X`?
+Currently unimplemented. This is really hard, because
+- It's unclear what the space of strategies is
+- Any optimization for maximizing final value will just result in investing as much as possible as early as possible, unless a tradeoff is specified.
+    - Writing a cost function for an optimization requires specifying preferences on consumption now and security later with mathematical precision.
+    - Maybe an optimization for highest smoothed consumption is possible? that would still need explicit constraints on money available to invest or consume.
+
+### Use Case 4: How many years does `P` portfolio last, with at least `X` confidence, given a drawdown strategy `D`?
+```julia
+s4 = Simulation(
+    RateConst(0.03),
+    RateHistorical(s_and_p_generator(; pessimism=1)),
+    MultipleStrategy([TargetRatioStrategy(0.0, [], fill(0.5, 100)), InvestmentDrawdownStrategy(4e3)]), # yearly rebalance to 50/50 high yeild savings and withdrwing 10k
+    Balances(0, 100e3),
+    50,
+    100_000
+)
+s4_result = run_fixed_years(s4)
+analyze(s4_result)
+println(percentilerank(sum.(s4_result), 100e3)) # see what percentage end lower than the initial balance
+```

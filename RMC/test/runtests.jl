@@ -103,6 +103,16 @@ end
         @test all(totals .≈  100.0)
         @test all(ratios .≈ sigmoid(YEARS))
     end
+    @testset "MultipleStrategy" begin
+        FIXED_AMOUNT = 100.0
+        strat1 = RegularContributionStrategy(FIXED_AMOUNT)
+        strat2 = InvestmentDrawdownStrategy(FIXED_AMOUNT)
+        strat = MultipleStrategy([strat1, strat2])
+        test_sim = Simulation(RateConst(0.0), RateConst(0.0), strat, Balances(0.0, 0.0), 10, 1)
+        end_balances = run_fixed_years(test_sim)
+        totals = sum.(end_balances)
+        @test all(totals .== 0.0)
+    end
 end
 
 @testset "pessimism" begin
@@ -129,4 +139,5 @@ end
     @test end_balances.savings ≈ (1 + SAVINGS_RATE)^YEARS
     @test end_balances.investment ≈ (1 + INVEST_RATE)^YEARS
 end
+
 
