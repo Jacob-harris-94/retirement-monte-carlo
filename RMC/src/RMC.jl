@@ -6,7 +6,7 @@ module RMC
 
 export AbstractRateProvider, rate, RateConst, RateHistorical, RateNormal, s_and_p_generator
 export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid, InvestmentDrawdownStrategy, MultipleStrategy
-export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, analyze, analyze_years
+export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, analyze, analyze_years, sim_search, sim_search_and_plot
 
 using StatsBase
 using Distributions: rand, Normal
@@ -287,5 +287,29 @@ function analyze_years(result_years, plot_title="")
     plot!(pct_50_line; linestyle=:dash, lineweight=:thick, color=:red, label="50th percentile $pct_50")
     # return (pct_5, pct_50) # TODO: this breaks plotting in the repl for some reason
 end 
+
+"""
+TODO: cleanup
+"""
+function sim_search(base_sim::Simulation, years_range, contribution_range, strat_fn, pct=50)
+    results = zeros(Float64, (length(years_range), length(contribution_range)))
+    for (yy, years) in enumerate(years_range), (cc, contribution) in enumerate(contribution_range)
+        sim = base_sim
+        sim.years = years
+        sim.strategy = strat_fn(years, contribution)
+        end_balances = run_fixed_years(sim)
+        results[yy, cc] = percentile(sum.(end_balances), pct)
+    end
+    return results
+end
+
+"""
+TODO: cleanup
+"""
+function sim_search_and_plot(base_sim::Simulation, years_range, contribution_range, strat_fn, pct=50)
+    matrix_out = sim_search(base_sim, years_range, contribution_range, strat_fn, pct)
+    # heatmap(contribution_range, years_range, matrix_out, xlabel="contribution", ylabel="years")
+    contour(contribution_range/1e3, years_range, matrix_out, xlabel="contribution", ylabel="years", fill=true, levels=10, color=:turbo, clabels=true, cbar=false, lw=1)
+end
 
 end # module
