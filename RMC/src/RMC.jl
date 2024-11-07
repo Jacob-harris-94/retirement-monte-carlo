@@ -256,9 +256,9 @@ end
 ### TODO
 - better way to view and compare multiple runs, e.g. violin plots? or aligned multi-plot figures?
 """
-function analyze(result_balances, plot_title="")
+function analyze(result_balances, plot_title=""; trim=true)
     results = sum.(result_balances)/1e6 # combine savings and investment
-    results_no_outliers = results[percentile(results, 1) .< results .< percentile(results, 99)] # only for plotting
+    results_no_outliers = trim ? results[percentile(results, 1) .< results .< percentile(results, 99)] : results # only for plotting
     hist = fit(Histogram, results_no_outliers, nbins=250)
     plot(hist, title=plot_title)
     h_max_plus = Int(ceil(maximum(hist.weights) * 1.05)) # for nicely plotting vertical lines
