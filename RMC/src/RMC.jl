@@ -6,7 +6,7 @@ module RMC
 
 export AbstractRateProvider, rate, RateConst, RateHistorical, RateNormal, s_and_p_generator
 export AbstractStrategy, Balances, step!, InitialBalanceStrategy, RegularContributionStrategy, SkipRegularContributionStrategy, TakeGainsOffTableStrategy, TargetRatioStrategy, sigmoid, InvestmentDrawdownStrategy, MultipleStrategy
-export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, analyze, analyze_years, sim_search, sim_search_and_plot
+export Simulation, SimulationFixedValue, update!, run_fixed_years, run_fixed_value, run_fixed_years_verbose, analyze, analyze_years, sim_search, sim_search_and_plot
 
 using StatsBase
 using Distributions: rand, Normal
@@ -227,6 +227,27 @@ function run_fixed_years(sim::Simulation)
         end
     end
     return balances
+end
+
+function run_fixed_years_verbose(sim::Simulation)
+    balances = [Balances(sim.balance_init.savings, sim.balance_init.investment)  for _ in 1:sim.num_samples]
+    values = zeros(Float64, sim.years, sim.num_samples)
+    Threads.@threads for ii in 1:sim.num_samples
+        for year in 1:sim.years
+            @infiltrate sum(balances[ii]) < 0.0
+            balances[ii] = step!(sim.strategy, balances[ii], year)
+            savings_rate = rate(sim.savings_rate_provider)
+            investment_rate = rate(sim.investment_rate_provider)
+            update!(balances[ii], savings_rate, investment_rate)
+            values[year, ii] = sum(balances[ii])
+            if sum(balances[ii]) < 0.0
+                balances[ii] = ZERO_BALANCE
+                values[year, ii] = sum(balances[ii])
+                break
+            end
+        end
+    end
+    return values
 end
 
 """
